@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
 import * as XLSX from 'xlsx';
 import { 
@@ -7,11 +7,11 @@ import {
     Trash2, ChevronLeft, ChevronRight, ChevronDown,
     Plus, Edit3, Check,
     AlertTriangle, Copy, RefreshCcw, FileDown, PlusCircle, Book, Info, CheckCircle2, X, Square, CheckSquare, Search, FileSpreadsheet,
-    Download, Upload, Database, Save, TableProperties, FileJson, FileType, Layers, TrendingUp, BookOpen, UserPlus, UserCheck
+    Download, Upload, Database, Save, TableProperties, FileJson, FileType, Layers, TrendingUp, BookOpen, UserPlus, UserCheck, ShieldCheck, Briefcase
 } from 'lucide-react';
 
 // --- CẤU HÌNH HỆ THỐNG ---
-const STORAGE_KEY = 'thcs_teaching_mgmt_v9_0_pro';
+const STORAGE_KEY = 'thcs_teaching_mgmt_v9_2_pro';
 
 const DEFAULT_SUBJECT_CONFIGS = [
     { name: 'Toán', p6: 4, p7: 4, p8: 4, p9: 4 },
@@ -293,10 +293,10 @@ const TeacherTab = ({ data, currentWeek, setCurrentWeek, updateWeekData, getWeek
                                     </td>
                                     <td className="p-5 text-center font-black text-slate-800 text-xl tracking-tighter">{tkb.toFixed(1)}</td>
                                     <td className="p-5">
-                                        <LocalNumericInput value={log.bu} onChange={(val: number) => updateWeekData(currentWeek, { logs: { ...logs, [t.id]: { ...log, bu: val } } })} className="w-16 mx-auto block text-center p-2.5 bg-orange-50 border-2 border-orange-100 rounded-xl font-black text-orange-700 outline-none text-sm shadow-inner"/>
+                                        <LocalNumericInput value={log.bu} onChange={(val: number) => updateWeekData(currentWeek, { logs: { ...logs, [t.id]: { ...log, bu: val } } })} className="w-16 mx-auto block text-center p-2.5 bg-orange-50 border-2 border-orange-100 rounded-xl font-black text-orange-700 outline-none text-sm shadow-inner" onBlur={(v: number) => updateWeekData(currentWeek, { logs: { ...logs, [t.id]: { ...log, bu: v } } })}/>
                                     </td>
                                     <td className="p-5">
-                                        <LocalNumericInput value={log.tang} onChange={(val: number) => updateWeekData(currentWeek, { logs: { ...logs, [t.id]: { ...log, tang: val } } })} className="w-16 mx-auto block text-center p-2.5 bg-orange-50 border-2 border-orange-100 rounded-xl font-black text-orange-700 outline-none text-sm shadow-inner"/>
+                                        <LocalNumericInput value={log.tang} onChange={(val: number) => updateWeekData(currentWeek, { logs: { ...logs, [t.id]: { ...log, tang: val } } })} className="w-16 mx-auto block text-center p-2.5 bg-orange-50 border-2 border-orange-100 rounded-xl font-black text-orange-700 outline-none text-sm shadow-inner" onBlur={(v: number) => updateWeekData(currentWeek, { logs: { ...logs, [t.id]: { ...log, tang: v } } })}/>
                                     </td>
                                     <td className="p-5 text-right opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button onClick={() => { if(confirm(`Xóa toàn bộ phân công tuần này của ${t.name}?`)) updateWeekData(currentWeek, { teachers: teachers.filter((x: any) => x.id !== t.id) }); }} className="text-slate-200 hover:text-red-500 p-2 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={20}/></button>
@@ -547,12 +547,25 @@ const ConfigTab = ({ data, updateData }: any) => {
     const [newName, setNewName] = useState('');
     const [newTeacherRoles, setNewTeacherRoles] = useState<string[]>([]);
     const [showRoleMenu, setShowRoleMenu] = useState(false);
+    
+    // State cho Quản lý Chức vụ mới
+    const [newRoleName, setNewRoleName] = useState('');
+    const [newRoleReduction, setNewRoleReduction] = useState(0);
+
     const tFileRef = useRef<HTMLInputElement>(null);
 
-    const generateTeacherId = () => {
-        const count = data.masterTeachers.length + 1;
-        return `GV${count.toString().padStart(3, '0')}`;
-    };
+    // Logic sinh mã ID Unique tuyệt đối: Tìm Max ID hiện có và cộng 1
+    const generateTeacherId = useCallback(() => {
+        if (!data.masterTeachers || data.masterTeachers.length === 0) return 'GV001';
+        
+        const ids = data.masterTeachers.map((t: any) => {
+            const match = t.id.match(/^GV(\d+)$/);
+            return match ? parseInt(match[1]) : 0;
+        });
+        
+        const maxId = Math.max(...ids, 0);
+        return `GV${(maxId + 1).toString().padStart(3, '0')}`;
+    }, [data.masterTeachers]);
 
     const handleAddTeacher = () => {
         if (!newName.trim()) return;
@@ -571,8 +584,18 @@ const ConfigTab = ({ data, updateData }: any) => {
         reader.onload = (evt) => {
             const wb = XLSX.read(evt.target?.result, { type: 'binary' });
             const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+            
+            // Xử lý ID unique cho import hàng loạt
+            let currentMax = 0;
+            if (data.masterTeachers.length > 0) {
+                currentMax = Math.max(...data.masterTeachers.map((t: any) => {
+                    const match = t.id.match(/^GV(\d+)$/);
+                    return match ? parseInt(match[1]) : 0;
+                }), 0);
+            }
+
             const newTs = rows.map((r: any, i: number) => ({
-                id: `GV_IMP_${Date.now()}_${i}`,
+                id: `GV${(currentMax + i + 1).toString().padStart(3, '0')}`,
                 name: r["Họ tên"] || r["Tên GV"] || "GV mới",
                 roles: (r["Chức vụ"] || "").split(",").map((s:any)=>s.trim()).filter((s:any)=>s)
             }));
@@ -581,13 +604,31 @@ const ConfigTab = ({ data, updateData }: any) => {
         reader.readAsBinaryString(file);
     };
 
+    const handleAddRole = () => {
+        if (!newRoleName.trim()) return;
+        const newRole = {
+            id: `r_${Date.now()}`,
+            name: newRoleName.trim(),
+            reduction: newRoleReduction
+        };
+        updateData({ roles: [...data.roles, newRole] });
+        setNewRoleName(''); setNewRoleReduction(0);
+    };
+
+    const handleRemoveRole = (roleId: string) => {
+        if (confirm("Xóa chức vụ này sẽ làm mất định mức giảm trừ của các giáo viên đang giữ chức vụ này. Tiếp tục?")) {
+            updateData({ roles: data.roles.filter((r: any) => r.id !== roleId) });
+        }
+    };
+
     return (
         <div className="p-8 animate-fadeIn space-y-12">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                {/* QUẢN LÝ NHÂN SỰ TẬP TRUNG */}
                 <div className="space-y-6">
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="text-xl font-black text-slate-800 uppercase italic tracking-tight flex items-center gap-2">
-                            <Users className="text-blue-600" /> Danh sách Nhân sự Master List
+                            <Users className="text-blue-600" /> Quản lý Nhân sự (Master List)
                         </h2>
                         <div className="flex gap-2">
                             <button onClick={() => tFileRef.current?.click()} className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors" title="Nhập từ Excel"><FileSpreadsheet size={20}/></button>
@@ -626,50 +667,91 @@ const ConfigTab = ({ data, updateData }: any) => {
                                 <div key={mt.id} className="p-4 bg-slate-50 rounded-2xl flex justify-between items-center group hover:bg-white hover:shadow-md transition-all border border-transparent hover:border-blue-100">
                                     <div>
                                         <div className="font-black text-slate-700 text-sm leading-none mb-1">{mt.name}</div>
-                                        <div className="text-[9px] text-slate-300 font-bold uppercase tracking-widest italic">Mã ID: {mt.id}</div>
+                                        <div className="text-[9px] text-slate-300 font-bold uppercase tracking-widest italic">Mã số: {mt.id}</div>
                                     </div>
-                                    <button onClick={() => { if(confirm(`Xóa ${mt.name} khỏi danh sách nhân sự?`)) updateData({ masterTeachers: data.masterTeachers.filter((x:any)=>x.id !== mt.id) }); }} className="text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-2"><Trash2 size={18}/></button>
+                                    <button onClick={() => { if(confirm(`Xóa ${mt.name} (${mt.id}) khỏi danh sách?`)) updateData({ masterTeachers: data.masterTeachers.filter((x:any)=>x.id !== mt.id) }); }} className="text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-2"><Trash2 size={18}/></button>
+                                </div>
+                            ))}
+                            {data.masterTeachers.length === 0 && <div className="text-center py-10 text-slate-300 font-bold text-xs uppercase italic">Chưa có giáo viên nào</div>}
+                        </div>
+                    </div>
+                </div>
+
+                {/* QUẢN LÝ CHỨC VỤ KIÊM NHIỆM */}
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-xl font-black text-slate-800 uppercase italic tracking-tight flex items-center gap-2">
+                            <Briefcase className="text-blue-600" /> Danh mục Chức vụ & Giảm trừ
+                        </h2>
+                    </div>
+
+                    <div className="bg-white p-8 rounded-[2.5rem] border-4 border-slate-50 shadow-xl space-y-6">
+                        <div className="flex flex-col gap-4">
+                            <div className="grid grid-cols-3 gap-3">
+                                <div className="col-span-2 space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tên Chức vụ</label>
+                                    <input type="text" placeholder="Ví dụ: Tổ trưởng..." value={newRoleName} onChange={e => setNewRoleName(e.target.value)} className="w-full p-4 bg-slate-50 rounded-xl font-bold border-none outline-none shadow-inner"/>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tiết giảm</label>
+                                    <input type="number" value={newRoleReduction} onChange={e => setNewRoleReduction(parseFloat(e.target.value) || 0)} className="w-full p-4 bg-slate-50 rounded-xl font-bold border-none outline-none shadow-inner text-center"/>
+                                </div>
+                            </div>
+                            <button onClick={handleAddRole} className="bg-slate-800 text-white p-4 rounded-xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:bg-slate-900 shadow-lg transition-all"><Plus size={18}/> Thêm chức vụ</button>
+                        </div>
+
+                        <div className="max-h-[300px] overflow-y-auto pr-2 no-scrollbar space-y-3 pt-6 border-t">
+                            {data.roles.map((r: any) => (
+                                <div key={r.id} className="p-4 bg-slate-50 rounded-2xl flex justify-between items-center group hover:bg-white hover:shadow-md transition-all border border-transparent hover:border-blue-100">
+                                    <div>
+                                        <div className="font-black text-slate-700 text-sm">{r.name}</div>
+                                        <div className="text-[9px] text-blue-500 font-bold uppercase tracking-widest">Giảm: {r.reduction} tiết/tuần</div>
+                                    </div>
+                                    {!['r1','r2','r3','r4','r5'].includes(r.id) && (
+                                        <button onClick={() => handleRemoveRole(r.id)} className="text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-2"><Trash2 size={18}/></button>
+                                    )}
                                 </div>
                             ))}
                         </div>
                     </div>
 
                     <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 shadow-inner">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 italic">Định mức chuẩn Giáo viên (Tiết/Tuần)</label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 italic">Định mức chuẩn chung (Tiết/Tuần)</label>
                         <input type="number" value={data.standardQuota} onChange={e => updateData({standardQuota: parseFloat(e.target.value) || 0})} className="text-7xl font-black text-blue-600 bg-transparent outline-none w-full tracking-tighter"/>
                     </div>
                 </div>
+            </div>
 
-                <div className="space-y-6">
-                    <h2 className="text-xl font-black text-slate-800 uppercase italic tracking-tight flex items-center gap-2"><BookOpen className="text-blue-600"/> Cấu hình Môn học & Số tiết</h2>
-                    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-xl space-y-6">
-                         <div className="grid grid-cols-4 gap-4 mb-8 pb-8 border-b">
-                            {['6', '7', '8', '9'].map(g => (
-                                <div key={g} className="text-center">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-tight leading-none">Số lớp K{g}</label>
-                                    <input type="number" value={data.gradeClassCounts[`p${g}`]} onChange={e => updateData({ gradeClassCounts: { ...data.gradeClassCounts, [`p${g}`]: parseInt(e.target.value) || 0 } })} className="w-full p-3 bg-slate-50 rounded-xl text-center font-black text-slate-800 text-lg shadow-inner outline-none"/>
+            {/* CẤU HÌNH MÔN HỌC CHI TIẾT */}
+            <div className="space-y-6">
+                <h2 className="text-xl font-black text-slate-800 uppercase italic tracking-tight flex items-center gap-2"><BookOpen className="text-blue-600"/> Cấu hình Định mức Tiết theo Môn học</h2>
+                <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-xl space-y-6">
+                     <div className="grid grid-cols-4 gap-4 mb-8 pb-8 border-b">
+                        {['6', '7', '8', '9'].map(g => (
+                            <div key={g} className="text-center">
+                                <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-tight leading-none">Số lớp K{g}</label>
+                                <input type="number" value={data.gradeClassCounts[`p${g}`]} onChange={e => updateData({ gradeClassCounts: { ...data.gradeClassCounts, [`p${g}`]: parseInt(e.target.value) || 0 } })} className="w-full p-3 bg-slate-50 rounded-xl text-center font-black text-slate-800 text-lg shadow-inner outline-none"/>
+                            </div>
+                        ))}
+                     </div>
+                     <div className="max-h-[600px] overflow-y-auto pr-2 no-scrollbar space-y-4">
+                        {data.subjectConfigs.map((s: any, i: number) => (
+                            <div key={i} className={`p-5 rounded-[1.5rem] border transition-all ${s.parent ? 'bg-blue-50/20 border-blue-50 ml-6' : 'bg-white border-slate-50 shadow-sm'}`}>
+                                <div className="flex justify-between items-center mb-3">
+                                    <div className="font-black text-slate-700 text-[13px] italic flex items-center gap-2">
+                                        {s.name} {s.parent && <span className="bg-blue-100 text-blue-600 text-[8px] px-2 py-0.5 rounded uppercase font-black">Thuộc {s.parent}</span>}
+                                    </div>
                                 </div>
-                            ))}
-                         </div>
-                         <div className="max-h-[600px] overflow-y-auto pr-2 no-scrollbar space-y-4">
-                            {data.subjectConfigs.map((s: any, i: number) => (
-                                <div key={i} className={`p-5 rounded-[1.5rem] border transition-all ${s.parent ? 'bg-blue-50/20 border-blue-50 ml-6' : 'bg-white border-slate-50 shadow-sm'}`}>
-                                    <div className="flex justify-between items-center mb-3">
-                                        <div className="font-black text-slate-700 text-[13px] italic flex items-center gap-2">
-                                            {s.name} {s.parent && <span className="bg-blue-100 text-blue-600 text-[8px] px-2 py-0.5 rounded uppercase font-black">Thuộc {s.parent}</span>}
+                                <div className="grid grid-cols-4 gap-3">
+                                    {['6', '7', '8', '9'].map(g => (
+                                        <div key={g} className="text-center">
+                                            <input type="number" step="0.5" value={s[`p${g}`]} onChange={e => { const nc = [...data.subjectConfigs]; nc[i][`p${g}`] = parseFloat(e.target.value) || 0; updateData({subjectConfigs: nc}); }} className="w-full p-2 bg-slate-50/50 rounded-xl text-center font-black text-blue-500 text-xs shadow-inner outline-none focus:ring-2 focus:ring-blue-100 transition-all"/>
                                         </div>
-                                    </div>
-                                    <div className="grid grid-cols-4 gap-3">
-                                        {['6', '7', '8', '9'].map(g => (
-                                            <div key={g} className="text-center">
-                                                <input type="number" step="0.5" value={s[`p${g}`]} onChange={e => { const nc = [...data.subjectConfigs]; nc[i][`p${g}`] = parseFloat(e.target.value) || 0; updateData({subjectConfigs: nc}); }} className="w-full p-2 bg-slate-50/50 rounded-xl text-center font-black text-blue-500 text-xs shadow-inner outline-none focus:ring-2 focus:ring-blue-100 transition-all"/>
-                                            </div>
-                                        ))}
-                                    </div>
+                                    ))}
                                 </div>
-                            ))}
-                         </div>
-                    </div>
+                            </div>
+                        ))}
+                     </div>
                 </div>
             </div>
         </div>
@@ -698,11 +780,17 @@ const App = () => {
 
     useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }, [data]);
 
-    const updateData = (newData: any) => setData((prev: any) => ({ ...prev, ...newData }));
-    const getWeekData = (week: number) => data.weeklyRecords[week] || { teachers: [], assignments: {}, logs: {} };
-    const updateWeekData = (week: number, weekContent: any) => {
-        updateData({ weeklyRecords: { ...data.weeklyRecords, [week]: { ...getWeekData(week), ...weekContent } } });
-    };
+    const updateData = useCallback((newData: any) => setData((prev: any) => ({ ...prev, ...newData })), []);
+    const getWeekData = useCallback((week: number) => data.weeklyRecords[week] || { teachers: [], assignments: {}, logs: {} }, [data.weeklyRecords]);
+    const updateWeekData = useCallback((week: number, weekContent: any) => {
+        setData((prev: any) => ({
+            ...prev,
+            weeklyRecords: { 
+                ...prev.weeklyRecords, 
+                [week]: { ...(prev.weeklyRecords[week] || { teachers: [], assignments: {}, logs: {} }), ...weekContent } 
+            }
+        }));
+    }, []);
 
     const getTKBPeriods = useMemo(() => {
         const configMap = new Map<string, any>();
@@ -726,12 +814,12 @@ const App = () => {
         };
     }, [data.subjectConfigs]);
 
-    const getTeacherReduction = (teacherRoles: string[]) => {
+    const getTeacherReduction = useMemo(() => (teacherRoles: string[]) => {
         return (teacherRoles || []).reduce((sum, roleName) => {
             const r = data.roles.find((x: any) => x.name === roleName);
             return sum + (r ? r.reduction : 0);
         }, 0);
-    };
+    }, [data.roles]);
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 overflow-x-hidden selection:bg-blue-100 selection:text-blue-800">
@@ -740,8 +828,8 @@ const App = () => {
                     <div className="flex items-center gap-3">
                         <div className="bg-blue-600 p-2.5 rounded-2xl text-white shadow-xl rotate-2"><LayoutDashboard size={24}/></div>
                         <div>
-                            <h1 className="font-black text-xl tracking-tighter text-slate-800 uppercase italic leading-none">GIẢNG DẠY THCS <span className="text-blue-600 text-[10px] align-top font-black italic">PRO v9.1</span></h1>
-                            <p className="text-[9px] font-bold uppercase text-slate-400 tracking-[0.2em] mt-1 italic leading-none">Management System</p>
+                            <h1 className="font-black text-xl tracking-tighter text-slate-800 uppercase italic leading-none">GIẢNG DẠY THCS <span className="text-blue-600 text-[10px] align-top font-black italic">PRO v9.2</span></h1>
+                            <p className="text-[9px] font-bold uppercase text-slate-400 tracking-[0.2em] mt-1 italic leading-none">Professional Management System</p>
                         </div>
                     </div>
                     <nav className="flex gap-1 bg-slate-100 p-1 rounded-2xl shadow-inner">
@@ -767,7 +855,7 @@ const App = () => {
                 </div>
             </main>
             <footer className="p-8 text-center text-[10px] font-black uppercase text-slate-300 tracking-[0.5em] italic flex items-center justify-center gap-3">
-                <UserCheck size={16}/> Professional Edition • v9.1
+                <UserCheck size={16}/> Professional Edition • v9.2
             </footer>
         </div>
     );
